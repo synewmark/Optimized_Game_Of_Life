@@ -9,6 +9,7 @@ local.properties
 .settings/
 .loadpath
 .recommenders
+*.class
 
 # External tool builders
 .externalToolBuilders/
@@ -113,3 +114,5 @@ Module.symvers
 Mkfile.old
 dkms.conf
 /target/
+
+*.vscode
