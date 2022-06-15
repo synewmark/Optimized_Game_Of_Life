@@ -24,19 +24,20 @@ public class GameOfLifeProactive extends GameOfLifeAbstract {
 		int ylen = modifiedArray[0].length;
 		for (int i = 0; i < n; i++) {
 			for (int j = 0; j < modifiedArray.length; j++) {
+
 				for (int k = 0; k < modifiedArray[j].length; k++) {
 					if (modifiedArray[j][k]) {
-						buffer[j + 1 % xlen][k]++;
-						buffer[j][k + 1 % ylen]++;
-						buffer[j + 1 % xlen][k + 1 % ylen]++;
+						buffer[(j + 1) % xlen][k]++;
+						buffer[j][(k + 1) % ylen]++;
+						buffer[(j + 1) % xlen][(k + 1) % ylen]++;
 
 						buffer[(j - 1 + xlen) % xlen][k]++;
 						buffer[j][(k - 1 + ylen) % ylen]++;
 						buffer[(j - 1 + xlen) % xlen][(k - 1 + ylen) % ylen]++;
 
-						buffer[(j - 1 + xlen) % xlen][k + 1 % ylen]++;
+						buffer[(j - 1 + xlen) % xlen][(k + 1) % ylen]++;
 
-						buffer[j + 1 % xlen][(k - 1 + ylen) % ylen]++;
+						buffer[(j + 1) % xlen][(k - 1 + ylen) % ylen]++;
 					}
 				}
 			}
