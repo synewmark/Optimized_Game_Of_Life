@@ -9,7 +9,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNative_getNGenerationNative
       jsize ylen = (*env)->GetArrayLength(env, dim1);
       jboolean **native_array = malloc(sizeof(jboolean*)*xlen);
       char** buffer = malloc(sizeof(char*)*xlen);
-    printf("%d\n", sizeof(jboolean));
+      //entering critical
       for (int i = 0; i < xlen; i++) {
           jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
           jboolean isCopy = JNI_FALSE;
@@ -48,5 +48,15 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNative_getNGenerationNative
 				memset(buffer[j], 0, sizeof(char)*ylen);
 		    }
       }
+
+      for (int i = 0; i < xlen; i++) {
+        jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
+        (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, native_array[i], 0);
+        free(buffer[i]);
+      }
+      //exited critical
+      free(native_array);
+      free(buffer);
+      // printf("Errno: %d\n", errno);
   }
 
