@@ -9,7 +9,7 @@ import java.util.Arrays;
 import java.util.Scanner;
 
 import game_of_life.GameOfLifeAbstract;
-import game_of_life.GameOfLifeProactive;
+import game_of_life.GameOfLifeNativePacked;
 
 public class Tester {
 	final char alive;
@@ -51,7 +51,7 @@ public class Tester {
 	}
 
 	long run() {
-		GameOfLifeAbstract game = new GameOfLifeProactive(initial);
+		GameOfLifeAbstract game = new GameOfLifeNativePacked(initial);
 		long start = System.nanoTime();
 		boolean[][] result = game.getNGeneration(genlength);
 		long end = System.nanoTime();
@@ -81,13 +81,16 @@ public class Tester {
 	}
 
 	public static void main(String... args) throws IOException {
-		File simple = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\large.txt");
-		File simpleexp = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\large_expected.txt");
+		File simple = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\flyer.txt");
+		File simpleexp = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\flyer_expected.txt");
 //		String content = Files.readString(simple, StandardCharsets.US_ASCII);
 //		String content1 = Files.readString(simpleexp, StandardCharsets.US_ASCII);
 //		System.out.println(content);
-		Tester test = new Tester(simple, simpleexp);
-		System.out.println(test.run());
+		for (int i = 0; i < 10; i++) {
+			Tester test = new Tester(simple, simpleexp);
+			System.out.println(test.run());
+		}
+
 //		randomOutput();
 	}
 
