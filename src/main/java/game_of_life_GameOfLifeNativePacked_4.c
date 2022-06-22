@@ -89,48 +89,56 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativePacked_getNGeneration
     for (int i = 0; i < runlength; i++) {
         for (int j = 0; j < xlen; j++) {
             for (int k = 0; k < ylenpacked; k++) {
-                for (int l = 0; l < 4; l++) {
-                  // printf("%d\n",(1 << l) & board[j][k]);
-                    if(is_alive(board[j][k], 0)) {
-                      buffer[safe_mod(j-1, xlen)][safe_mod((k*2)-1, ylenpackedhalf)].pos1++;
-                      buffer[safe_mod(j-1, xlen)][(k*2)].pos0++;
-                      buffer[safe_mod(j-1, xlen)][(k*2)].pos1++;
+                if(is_alive(board[j][k], 0)) {
+                  buffer[safe_mod(j-1, xlen)][safe_mod((k*2)-1, ylenpackedhalf)].pos1++;
+                  buffer[safe_mod(j-1, xlen)][(k*2)].pos0++;
+                  buffer[safe_mod(j-1, xlen)][(k*2)].pos1++;
 
-                      buffer[j][safe_mod((k*2)-1, ylenpackedhalf)].pos1++;
-                      buffer[j][(k*2)].pos1++;
+                  buffer[j][safe_mod((k*2)-1, ylenpackedhalf)].pos1++;
+                  buffer[j][(k*2)].pos1++;
 
-                      buffer[mod(j+1, xlen)][safe_mod((k*2)-1, ylenpackedhalf)].pos1++;
-                      buffer[mod(j+1, xlen)][(k*2)].pos0++;
-                      buffer[mod(j+1, xlen)][(k*2)].pos1++;
-                    }
-                    if(is_alive(board[j][k], 1)) {
-                      buffer[safe_mod(j-1, xlen)][(k*2)].pos0++;
-                      buffer[safe_mod(j-1, xlen)][(k*2)].pos1++;
-                      // printf("!y is: %d y-incr: %d\n", k*4+l, mod((k+l)/2+1, ylenpackedhalf));
-                      buffer[safe_mod(j-1, xlen)][mod((k*2)+1, ylenpackedhalf)].pos0++;
-
-                      buffer[j][(k*2)].pos0++;
-                      buffer[j][mod((k*2)+1, ylenpackedhalf)].pos0++;
-
-                      buffer[mod(j+1, xlen)][(k*2)].pos0++;
-                      buffer[mod(j+1, xlen)][(k*2)].pos1++;
-                      buffer[mod(j+1, xlen)][mod((k*2)+1,ylenpackedhalf)].pos0++;
-                    }
-                    if(is_alive(board[j][k], 2)) {
-                      buffer[safe_mod(j-1, xlen)][safe_mod((k*2)+1-1, ylenpackedhalf)].pos1++;
-                      buffer[safe_mod(j-1, xlen)][(k*2)+1].pos0++;
-                      buffer[safe_mod(j-1, xlen)][(k*2)+1].pos1++;
-
-                      buffer[j][safe_mod((k*2)+1-1, ylenpackedhalf)].pos1++;
-                      buffer[j][(k*2)+1].pos1++;
-
-                      buffer[mod(j+1, xlen)][safe_mod((k*2)+1-1, ylenpackedhalf)].pos1++;
-                      buffer[mod(j+1, xlen)][(k*2)+1].pos0++;
-                      buffer[mod(j+1, xlen)][(k*2)+1].pos1++;
-                    }
-                    // printf("Here3\n");
+                  buffer[mod(j+1, xlen)][safe_mod((k*2)-1, ylenpackedhalf)].pos1++;
+                  buffer[mod(j+1, xlen)][(k*2)].pos0++;
+                  buffer[mod(j+1, xlen)][(k*2)].pos1++;
                 }
-                // printf("Here4\n");
+                if(is_alive(board[j][k], 1)) {
+                  buffer[safe_mod(j-1, xlen)][(k*2)].pos0++;
+                  buffer[safe_mod(j-1, xlen)][(k*2)].pos1++;
+                  // printf("!y is: %d y-incr: %d\n", k*4+l, mod((k+l)/2+1, ylenpackedhalf));
+                  buffer[safe_mod(j-1, xlen)][mod((k*2)+1, ylenpackedhalf)].pos0++;
+
+                  buffer[j][(k*2)].pos0++;
+                  buffer[j][mod((k*2)+1, ylenpackedhalf)].pos0++;
+
+                  buffer[mod(j+1, xlen)][(k*2)].pos0++;
+                  buffer[mod(j+1, xlen)][(k*2)].pos1++;
+                  buffer[mod(j+1, xlen)][mod((k*2)+1,ylenpackedhalf)].pos0++;
+                }
+                if(is_alive(board[j][k], 2)) {
+                  buffer[safe_mod(j-1, xlen)][safe_mod((k*2)+1-1, ylenpackedhalf)].pos1++;
+                  buffer[safe_mod(j-1, xlen)][(k*2)+1].pos0++;
+                  buffer[safe_mod(j-1, xlen)][(k*2)+1].pos1++;
+
+                  buffer[j][safe_mod((k*2)+1-1, ylenpackedhalf)].pos1++;
+                  buffer[j][(k*2)+1].pos1++;
+
+                  buffer[mod(j+1, xlen)][safe_mod((k*2)+1-1, ylenpackedhalf)].pos1++;
+                  buffer[mod(j+1, xlen)][(k*2)+1].pos0++;
+                  buffer[mod(j+1, xlen)][(k*2)+1].pos1++;
+                }
+                if(is_alive(board[j][k], 3)) {
+                  buffer[safe_mod(j-1, xlen)][(k*2)+1].pos0++;
+                  buffer[safe_mod(j-1, xlen)][(k*2)+1].pos1++;
+                  // printf("!y is: %d y-incr: %d\n", k*4+l, mod((k+l)/2+1, ylenpackedhalf));
+                  buffer[safe_mod(j-1, xlen)][mod((k*2)+1+1, ylenpackedhalf)].pos0++;
+
+                  buffer[j][(k*2)+1].pos0++;
+                  buffer[j][mod((k*2)+1+1, ylenpackedhalf)].pos0++;
+
+                  buffer[mod(j+1, xlen)][(k*2)+1].pos0++;
+                  buffer[mod(j+1, xlen)][(k*2)+1].pos1++;
+                  buffer[mod(j+1, xlen)][mod((k*2)+1+1,ylenpackedhalf)].pos0++;
+                }
             }
         }
         // printf("Here5\n");

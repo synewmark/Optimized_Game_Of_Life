@@ -34,43 +34,32 @@ signed char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* yle
       board[i] = calloc(sizeof(char), ylenpacked);
       for (int j = 0; j < ylenpacked; j++) {
         signed char c = 0;
-          if (boolElementsi[j*8+7]) {
-            c++;
-          }
+        for (int k = 7; k >= 0; k--) {
           c<<=1;
-          if (boolElementsi[j*8+6]) {
-            c++;
-          }
-          c<<=1;
-          if (boolElementsi[j*8+5]) {
-            c++;
-          }
-          c<<=1;
-          if (boolElementsi[j*8+4]) {
-            c++;
-          }
-          c<<=1;
-          if (boolElementsi[j*8+3]) {
-            c++;
-          }
-          c<<=1;
-          if (boolElementsi[j*8+2]) {
-            c++;
-          }
-          c<<=1;
-          if (boolElementsi[j*8+1]) {
-            c++;
-          }
-          c<<=1;
-          if (boolElementsi[j*8]) {
-            c++;
-          }
-          board[i][j] = c;
+          c+=(boolElementsi[j*8+k]);
+        }
+        board[i][j] = c;
       }
     (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
   }
   return board;
 }
+
+void unpack_8(JNIEnv* env, jobjectArray array, signed char** board, int xlen, int ylenpacked){
+  for (int i = 0; i < xlen; i++) {
+      jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
+      jboolean* boolElementsi = (*env)->GetPrimitiveArrayCritical(env, boolArrayi, 0);
+      for (int j = 0; j < ylenpacked; j++) {
+        for (int k = 0; k < 8; k++) {
+            boolElementsi[j*8+k] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
+        }
+      }
+      free(board[i]);
+      (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
+    }
+}
+
+
 
 JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativePacked_getNGenerationNative
   (JNIEnv * env, jobject object, jint runlength, jobjectArray array) {
@@ -236,16 +225,10 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativePacked_getNGeneration
             memset(buffer[j], 0, sizeof(struct packed_short)*ylenpackedhalf);
         }
     }
-    // printf("Got here!!");
+    unpack_8(env, array, board, xlen, ylenpacked);
     for (int i = 0; i < xlen; i++) {
-      jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
-      jboolean* boolElementsi = (*env)->GetPrimitiveArrayCritical(env, boolArrayi, 0);
-      for (int j = 0; j < ylenpacked; j++) {
-        for (int k = 0; k < 8; k++) {
-            boolElementsi[j*8+k] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
-        }
-      }
-      (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
+      free(buffer[i]);
     }
-
+    free(board);
+    free(buffer);
   }
