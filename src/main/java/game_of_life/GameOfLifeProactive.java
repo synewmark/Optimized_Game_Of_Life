@@ -21,23 +21,28 @@ public class GameOfLifeProactive extends GameOfLifeAbstract {
 			modifiedArray[i] = this.getBoard()[i].clone();
 		}
 		int xlen = modifiedArray.length;
-		int ylen = modifiedArray[0].length;
+//		
 		for (int i = 0; i < n; i++) {
 			for (int j = 0; j < modifiedArray.length; j++) {
+				int ylen0 = modifiedArray[(j - 1 + xlen) % xlen].length;
 
-				for (int k = 0; k < modifiedArray[j].length; k++) {
+				int ylen1 = modifiedArray[j].length;
+				int ylen2 = modifiedArray[(j + 1) % xlen].length;
+				for (int k = 0; k < ylen1; k++) {
+
 					if (modifiedArray[j][k]) {
-						buffer[(j + 1) % xlen][k]++;
-						buffer[j][(k + 1) % ylen]++;
-						buffer[(j + 1) % xlen][(k + 1) % ylen]++;
+						buffer[(j + 1) % xlen][(k - 1 + ylen2) % ylen2]++;
+						buffer[(j + 1) % xlen][k % ylen2]++;
+						buffer[(j + 1) % xlen][(k + 1) % ylen2]++;
 
-						buffer[(j - 1 + xlen) % xlen][k]++;
-						buffer[j][(k - 1 + ylen) % ylen]++;
-						buffer[(j - 1 + xlen) % xlen][(k - 1 + ylen) % ylen]++;
+						buffer[j][(k + 1) % ylen1]++;
 
-						buffer[(j - 1 + xlen) % xlen][(k + 1) % ylen]++;
+						buffer[j][(k - 1 + ylen1) % ylen1]++;
 
-						buffer[(j + 1) % xlen][(k - 1 + ylen) % ylen]++;
+						buffer[(j - 1 + xlen) % xlen][(k - 1 + ylen0) % ylen0]++;
+						buffer[(j - 1 + xlen) % xlen][k % ylen0]++;
+						buffer[(j - 1 + xlen) % xlen][(k + 1) % ylen0]++;
+
 					}
 				}
 			}
