@@ -9,7 +9,7 @@ import java.util.Arrays;
 import java.util.Scanner;
 
 import game_of_life.GameOfLifeAbstract;
-import game_of_life.GameOfLifeNativePacked;
+import game_of_life.GameOfLifeProactive;
 
 public class Tester {
 	final char alive;
@@ -27,8 +27,11 @@ public class Tester {
 		String[] header = firstLine.split(" ");
 		x = Integer.parseInt(header[1]);
 		y = Integer.parseInt(header[2]);
+//		x = 1000;
+//		y = 1000;
 		System.out.println(x + " " + y);
 		genlength = Integer.parseInt(header[0]);
+//		genlength = 3;
 		alive = header[3].charAt(0);
 		dead = header[4].charAt(0);
 		initial = new boolean[x][y];
@@ -51,7 +54,7 @@ public class Tester {
 	}
 
 	long run() {
-		GameOfLifeAbstract game = new GameOfLifeNativePacked(initial);
+		GameOfLifeAbstract game = new GameOfLifeProactive(initial);
 		long start = System.nanoTime();
 		boolean[][] result = game.getNGeneration(genlength);
 		long end = System.nanoTime();
@@ -81,8 +84,8 @@ public class Tester {
 	}
 
 	public static void main(String... args) throws IOException {
-		File simple = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\flyer.txt");
-		File simpleexp = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\flyer_expected.txt");
+		File simple = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\small_long.txt");
+		File simpleexp = new File("C:\\Users\\ahome\\git\\Optimized_Game_Of_Life\\test_cases\\small_long_expected.txt");
 //		String content = Files.readString(simple, StandardCharsets.US_ASCII);
 //		String content1 = Files.readString(simpleexp, StandardCharsets.US_ASCII);
 //		System.out.println(content);
@@ -96,17 +99,17 @@ public class Tester {
 
 	public static void randomOutput() {
 		try {
-			int x = 20000;
-			int y = 10000;
-			int gen = 1000000;
+			int x = 96;
+			int y = 96;
+			int gen = 100000000;
 			PrintWriter out = new PrintWriter("output.txt");
-			out.println(x + " " + y + " " + gen + " 0 O");
-			for (int i = 0; i < 20000; i++) {
-				for (int j = 0; j < 10000; j++) {
-					out.print(Math.random() < 0.25 ? '0' : 'O');
+			out.println(gen + " " + x + " " + y + " " + "0 O");
+			for (int i = 0; i < x; i++) {
+				for (int j = 0; j < y; j++) {
+					out.print(Math.random() < 0.33 ? '0' : 'O');
 				}
 				out.println();
-				System.out.println("Finished line: " + i);
+//				System.out.println("Finished line: " + i);
 			}
 			out.close();
 		} catch (FileNotFoundException e) {
