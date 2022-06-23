@@ -11,11 +11,10 @@ public class GameOfLifeNativeDirty extends GameOfLifeAbstract {
 
 	public GameOfLifeNativeDirty(boolean[][] board) {
 		super(name, description, board);
-		this.temp = board;
-//		this.temp = new boolean[board.length][board[0].length];
-//		for (int i = 0; i < board.length; i++) {
-//			temp[i] = board[i].clone();
-//		}
+		this.temp = new boolean[board.length][board[0].length];
+		for (int i = 0; i < board.length; i++) {
+			temp[i] = board[i].clone();
+		}
 	}
 
 	@Override
