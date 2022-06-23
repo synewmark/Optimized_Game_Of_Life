@@ -81,7 +81,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativePacked_getNGeneration
       buffer[i] = calloc(ylenpackedhalf, sizeof(struct packed_short));
     }
     // printf("Here2\n");
-    printf("packed: %d packed half: %d\n", ylenpacked, ylenpackedhalf);
+    // printf("packed: %d packed half: %d\n", ylenpacked, ylenpackedhalf);
     for (int i = 0; i < runlength; i++) {
         for (int j = 0; j < xlen; j++) {
             for (int k = 0; k < ylenpacked; k++) {

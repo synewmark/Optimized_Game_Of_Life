@@ -108,7 +108,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirty_getNGenerationN
       memset(dirty_bit1[i], 0xFF, sizeof(char)*ylenpackeddouble);
       // printf("%d\n", i);
     }
-    printf("packed: %d packed half: %d packed double: %d\n", ylenpacked, ylenpackedhalf, ylenpackeddouble);
+    // printf("packed: %d packed half: %d packed double: %d\n", ylenpacked, ylenpackedhalf, ylenpackeddouble);
     for (int j = 0; j < xlen; j++) {
       for (int k = 0; k < ylenpacked; k++) {
         // for (int l = 0; l < 4; l++) {
@@ -420,5 +420,5 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirty_getNGenerationN
     }
     free(board);
     free(buffer);
-    printf("Skipped: %lu, didn't skip %lu\n", skip_count, non_skip_count);
+    // printf("Skipped: %lu, didn't skip %lu\n", skip_count, non_skip_count);
     }
