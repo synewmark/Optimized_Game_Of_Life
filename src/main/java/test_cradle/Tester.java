@@ -5,11 +5,14 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.Arrays;
 import java.util.Scanner;
 
 import game_of_life.GameOfLifeAbstract;
+import game_of_life.GameOfLifeNative;
+import game_of_life.GameOfLifeNativeDirty;
+import game_of_life.GameOfLifeNativePacked;
 import game_of_life.GameOfLifeProactive;
+import game_of_life.GameOfLifeStandard;
 
 public class Tester {
 	final char alive;
@@ -31,7 +34,7 @@ public class Tester {
 //		y = 1000;
 		System.out.println(x + " " + y);
 		genlength = Integer.parseInt(header[0]);
-//		genlength = 3;
+//		genlength = 100;
 		alive = header[3].charAt(0);
 		dead = header[4].charAt(0);
 		initial = new boolean[x][y];
@@ -53,22 +56,22 @@ public class Tester {
 
 	}
 
-	long run() {
-		GameOfLifeAbstract game = new GameOfLifeProactive(initial);
+	long run(GameOfLifeAbstract game, int genlength) {
+//		GameOfLifeAbstract game = new GameOfLifeProactive(initial);
 		long start = System.nanoTime();
 		boolean[][] result = game.getNGeneration(genlength);
 		long end = System.nanoTime();
-		if (!Arrays.deepEquals(result, expected)) {
-			try {
-				PrintWriter out = new PrintWriter("output.txt");
-				out.print(printer(result));
-				out.close();
-			} catch (FileNotFoundException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			System.out.println("Failed");
-		}
+//		if (!Arrays.deepEquals(result, expected)) {
+//			try {
+//				PrintWriter out = new PrintWriter("output.txt");
+//				out.print(printer(result));
+//				out.close();
+//			} catch (FileNotFoundException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+//			System.out.println("Failed");
+//		}
 		return end - start;
 	}
 
@@ -89,12 +92,18 @@ public class Tester {
 //		String content = Files.readString(simple, StandardCharsets.US_ASCII);
 //		String content1 = Files.readString(simpleexp, StandardCharsets.US_ASCII);
 //		System.out.println(content);
-		for (int i = 0; i < 10; i++) {
-			Tester test = new Tester(simple, simpleexp);
-			System.out.println(test.run());
-		}
+//		for (int i = 0; i < 10; i++) {
+////			System.out.println(test.run());
+//		}
 
 //		randomOutput();
+		Tester test = new Tester(simple, simpleexp);
+		String[] results = test.testAll(10);
+		System.out.println();
+		for (String s : results) {
+			System.out.println(s);
+		}
+
 	}
 
 	public static void randomOutput() {
@@ -116,6 +125,30 @@ public class Tester {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	}
 
+	String[] testAll(int avglength) {
+		GameOfLifeAbstract[] all = getAll(initial);
+		String[] returnString = new String[all.length];
+		for (int i = 0; i < all.length; i++) {
+			long[] runLength = new long[avglength];
+			for (int j = 0; j < avglength; j++) {
+				runLength[j] = run(all[i], genlength);
+			}
+			long total = 0;
+			for (long l : runLength) {
+				total += l;
+			}
+			total /= avglength;
+			returnString[i] = String.format("Technique %s took avg %d, for %dx%d", all[i].getName(), total,
+					initial.length, initial[0].length);
+		}
+		return returnString;
+	}
+
+	private GameOfLifeAbstract[] getAll(boolean[][] board) {
+		GameOfLifeAbstract[] array = { new GameOfLifeStandard(board), new GameOfLifeProactive(board),
+				new GameOfLifeNative(board), new GameOfLifeNativePacked(board), new GameOfLifeNativeDirty(board) };
+		return array;
 	}
 }
