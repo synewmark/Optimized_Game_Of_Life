@@ -3,7 +3,7 @@ package game_of_life;
 import java.util.Arrays;
 
 public class GameOfLifeProactive extends GameOfLifeAbstract {
-	private final static String name = "Standard Technique";
+	private final static String name = "Proactive Technique";
 	private final static String description = "For loop check each adjacent";
 
 	private final byte[][] buffer;

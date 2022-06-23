@@ -4,7 +4,7 @@ public class GameOfLifeNativeDirty extends GameOfLifeAbstract {
 	static {
 		System.loadLibrary("native_dirty");
 	}
-	private final static String name = "Standard Technique";
+	private final static String name = "Native Dirty Technique";
 	private final static String description = "For loop check each adjacent";
 
 	private final boolean[][] temp;

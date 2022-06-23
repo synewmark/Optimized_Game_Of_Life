@@ -4,7 +4,7 @@ public class GameOfLifeNativePacked extends GameOfLifeAbstract {
 	static {
 		System.loadLibrary("native_packed");
 	}
-	private final static String name = "Standard Technique";
+	private final static String name = "Native Packed Technique";
 	private final static String description = "For loop check each adjacent";
 
 	private final boolean[][] temp;
