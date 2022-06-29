@@ -8,8 +8,8 @@
 
 
 struct packed_short{
-    signed char pos0 : 4;
-    signed char pos1 : 4;
+    unsigned char pos0 : 4;
+    unsigned char pos1 : 4;
 };
 
 signed char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* ylen_store) {
@@ -97,7 +97,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
     signed char** dirty_bit2 = malloc(sizeof(char*)*(xlen+2));
     dirty_bit1 = dirty_bit1+1;
     dirty_bit2 = dirty_bit2+1;
-    for (int i = -1; i < xlen+1; i++) {
+    for (int i = 0; i < xlen; i++) {
       buffer[i] = calloc(ylenpackedhalf+2, sizeof(struct packed_short));
       if (!buffer[i]) {
         printf("Errno: %d\n", errno);
@@ -118,12 +118,18 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
         printf("Errno: %d\n", errno);
       }
       dirty_bit1[i] = dirty_bit1[i]+1;
-      if (i == -1 || i == xlen) {
-        continue;
-      }
       memset(dirty_bit1[i], 0xFF, sizeof(char)*ylenpackeddouble);
       // printf("%d\n", i);
     }
+    buffer[-1] = buffer[xlen-1];
+    buffer2[-1] = buffer2[xlen-1];
+    dirty_bit1[-1] = dirty_bit1[xlen-1];
+    dirty_bit2[-1] = dirty_bit2[xlen-1];
+
+    buffer[xlen] = buffer[0];
+    buffer2[xlen] = buffer2[0];
+    dirty_bit1[xlen] = dirty_bit1[0];
+    dirty_bit2[xlen] = dirty_bit2[0];
     // printf("%d, %d\n", ylenpackedhalf, ylenpackeddouble);
     // printf("packed: %d packed half: %d packed double: %d\n", ylenpacked, ylenpackedhalf, ylenpackeddouble);
     for (int j = 0; j < xlen; j++) {
@@ -412,28 +418,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
       temp = dirty_bit1;
       dirty_bit1 = dirty_bit2;
       dirty_bit2 = temp;
-      for (int j = 0; j < ylenpackeddouble; j++) {
-        dirty_bit1[0][j] |= dirty_bit1[xlen][j];
-        dirty_bit1[xlen-1][j] |= dirty_bit1[-1][j];
-      }
-      buffer[0][0].pos0 += buffer[xlen][ylenpackedhalf].pos0;
-      buffer[0][ylenpackedhalf-1].pos1 += buffer[xlen][-1].pos1;
-      buffer[xlen-1][0].pos0 += buffer[-1][ylenpackedhalf].pos0;
-      buffer[xlen-1][ylenpackedhalf-1].pos1 += buffer[-1][-1].pos1;
-      for (int j = 0; j < ylenpackedhalf; j++) {
-        buffer[0][j].pos0 += buffer[xlen][j].pos0;
-        buffer[0][j].pos1 += buffer[xlen][j].pos1;
-
-        buffer[xlen-1][j].pos0 += buffer[-1][j].pos0;
-        buffer[xlen-1][j].pos1 += buffer[-1][j].pos1;
-      }
-      memset(buffer[-1]-1, 0, (ylenpackedhalf+2)*sizeof(struct packed_short));
-      memset(buffer[xlen]-1, 0, (ylenpackedhalf+2)*sizeof(struct packed_short));
-
       for (int j = 0; j < xlen; j++) {
-          // char over = dirty_bit1[j][ylenpackeddouble-1];
-          // over >>= (ylenpacked%8);
-          // printf("%d is over: %x\n", j, over);
           dirty_bit1[j][0] |= 0x1;
           set_alive(dirty_bit1[j][ylenpackeddouble-1], ylenpacked%8-1);
 
@@ -442,7 +427,6 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
           buffer[j][ylenpackedhalf-1].pos1 += buffer[j][-1].pos1;
           buffer[j][ylenpackedhalf].pos0 = 0;
           buffer[j][-1].pos1 = 0;
-          // memset(dirty_bit1[j], 0xFF, sizeof(char)*ylenpackeddouble);
           memcpy(buffer2[j], buffer[j], ylenpackedhalf*sizeof(struct packed_short));
           memset(dirty_bit2[j], 0, sizeof(char)*ylenpackeddouble);
       }      
