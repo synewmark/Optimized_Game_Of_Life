@@ -69,14 +69,29 @@ public class GameOfLifeLookup extends GameOfLifeAbstract {
 				}
 			}
 			lookup[i] = result;
-//			if (i == 0x4010040) {
-//				System.out.println(Arrays.toString(count));
-//				System.out.println(Integer.toHexString(result & 0xFF));
-//				System.out.println();
-//			}
 		}
 		return lookup;
 	}
-}
 
+//	public static void main(String[] args) {
+//		byte[] val = generateLookup();
+//		for (int i = 0; i < 20; i++) {
+//			int attempt = (int) (Math.random() * (1 << 30));
+//			int low = attempt & 0x03FF;
+//			int mid = (attempt & 0xFFC00) >> 10;
+//			int high = (attempt & 0x3FF00000) >> 20;
+//
+//			System.out.println(String.format("%10s", Integer.toBinaryString(high)).replace(" ", "0"));
+//			System.out.println(String.format("%10s", Integer.toBinaryString(mid)).replace(" ", "0"));
+//			System.out.println(String.format("%10s", Integer.toBinaryString(low)).replace(" ", "0"));
+//
+//			System.out.println();
+//			System.out.println(String.format("%10s", Integer.toBinaryString(val[attempt])).replace(" ", "0"));
+//
+//			System.out.println();
+//			System.out.println();
+//
+//		}
+//
+//	}
 }
