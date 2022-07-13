@@ -5,18 +5,32 @@
 #define set_alive(char, pos) (char |= (1 << (pos)))
 #define mod(n, m) ((n)%(m))
 #define safe_mod(n, m) mod((n+m), m)
-#define get_integral_row(left, center, right) (((right & (1)) << 9) | (center << 1) | (left & (1 << 7)) >> 7);
+#define get_integral_row_left(left, center) (((left & 1) << 5)) | (center >> 3)
+#define get_integral_row_right(center, right) (((center & 0x1F) << 1) | (right & (1 << 7)) >> 7)
+
 
 struct packed_short{
     unsigned char pos0 : 4;
     unsigned char pos1 : 4;
 };
 
-int get_integral_val(unsigned int nw, unsigned int n, unsigned int ne, unsigned int w, unsigned int c, unsigned int e, unsigned int sw, unsigned int s, unsigned int se) {
-    int top = get_integral_row(nw, n, ne);
-    int mid = get_integral_row(w, c, e);
-    int bot = get_integral_row(sw, s, se);
-    return ((top << 20) | (mid << 10) | bot);
+unsigned int get_integral_val_left(unsigned int nw, unsigned int n, unsigned int w, unsigned int c, unsigned int sw, unsigned int s) {
+    unsigned int top = get_integral_row_left(nw, n);
+    unsigned int mid = get_integral_row_left(w, c);
+    unsigned int bot = get_integral_row_left(sw, s);
+    return ((top << 12) | (mid << 6) | bot);
+}
+
+unsigned int get_integral_val_right(unsigned int n, unsigned int ne, unsigned int c, unsigned int e, unsigned int s, unsigned int se) {
+    unsigned int top = get_integral_row_right(n, ne);
+    unsigned int mid = get_integral_row_right(c, e);
+    unsigned int bot = get_integral_row_right(s, se);
+    // printf("center is: %x\n", s);
+    // printf("center shift is: %x\n", ((s & 0x1F) << 1));
+    // printf("right shift is: %x\n", ((se & (1 << 7)) >> 7));
+    // printf("bot is: %x\n", bot);
+
+    return ((top << 12) | (mid << 6) | bot);
 }
 
 unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* ylen_store) {
@@ -51,7 +65,7 @@ unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* y
       // printf("board[%d] = %x\n", i, board[i]);
       for (int j = 0; j < ylenpacked; j++) {
         signed char c = 0;
-        for (int k = 7; k >= 0; k--) {
+        for (int k = 0; k < 8; k++) {
           c<<=1;
           c+=(boolElementsi[j*8+k]);
         }
@@ -76,7 +90,7 @@ void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board, int xlen, 
           // printf("not blank!");
         }
         for (int k = 0; k < 8; k++) {
-            boolElementsi[j*8+k] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
+            boolElementsi[j*8+(7-k)] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
         }
       }
       // printf("board[%d] = %x\n", i, board[i]);
@@ -161,25 +175,33 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeLookup_getNGenerationNative
             continue;
           }
           non_skip_count++;
-          unsigned int lookupval = get_integral_val(board1[j-1][k-1], board1[j-1][k], board1[j-1][k+1], board1[j][k-1], board1[j][k], board1[j][k+1], board1[j+1][k-1], board1[j+1][k], board1[j+1][k+1]);
-          // printf("Lookup val for x: %x, y: %d is: %x\n", j, k, lookupval);
-          // printf("Center is: %x\n", board1[j][k]);
-          unsigned char newval = lookuptable[lookupval];
-          // printf("Lookup result is: %x\n", newval);
-          char xc = newval^board1[j][k];
+          unsigned int lookupvalleft = get_integral_val_left(board1[j-1][k-1], board1[j-1][k], board1[j][k-1], board1[j][k], board1[j+1][k-1], board1[j+1][k]);
+          unsigned char newvalleft = lookuptable[lookupvalleft];
+          
+          unsigned int lookupvalright = get_integral_val_right(board1[j-1][k], board1[j-1][k+1], board1[j][k], board1[j][k+1], board1[j+1][k], board1[j+1][k+1]);
+          unsigned char newvalright = lookuptable[lookupvalright];
+          
+          // printf("Lookup val for x: %x, y: %d left is: %x\n", j, k, lookupvalleft);
+          // printf("Lookup val for x: %x, y: %d right is: %x\n", j, k, lookupvalright);
+          // printf("Lookup val result left: %x\n", newvalleft);
+          // printf("Lookup val result right: %x\n", newvalright);
 
+          unsigned char newval = (newvalleft << 4) | newvalright;
+          char xc = newval^board1[j][k];
+          // printf("Center is: %x\n", board1[j][k]);
+          // printf("Lookup result is: %x\n", newval);
           if (xc) {
             set_alive(dirty_bit2[j+1][k/8], k%8);
             set_alive(dirty_bit2[j][k/8], k%8);
             set_alive(dirty_bit2[j-1][k/8], k%8);
 
-            if (is_alive(xc, 0)) {
+            if (is_alive(xc, 7)) {
               set_alive(dirty_bit2[j+1][k/8-(k%8==0)], safe_mod(k-1, 8));
               set_alive(dirty_bit2[j][k/8-(k%8==0)], safe_mod(k-1, 8));
               set_alive(dirty_bit2[j-1][k/8-(k%8==0)], safe_mod(k-1, 8));
             }
 
-            if (is_alive(xc, 7)) {
+            if (is_alive(xc, 0)) {
               set_alive(dirty_bit2[j+1][k/8+(k%8==7)], mod(k+1, 8));
               set_alive(dirty_bit2[j][k/8+(k%8==7)], mod(k+1, 8));
               set_alive(dirty_bit2[j-1][k/8+(k%8==7)], mod(k+1, 8));
