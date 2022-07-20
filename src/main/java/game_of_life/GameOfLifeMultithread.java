@@ -2,7 +2,7 @@ package game_of_life;
 
 public class GameOfLifeMultithread extends GameOfLifeAbstract {
 	static {
-//		System.load("C:\\gcc\\x86_64-w64-mingw32\\bin\\libwinpthread-1.dll");
+		System.loadLibrary("libwinpthread-1");
 //		System.load("C:\\Windows\\System32\\");
 //		System.load("C:\\Windows\\System32\\");
 
