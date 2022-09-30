@@ -8,6 +8,8 @@
 #define set_alive(char, pos) (char |= (1 << (pos)))
 #define mod(n, m) ((n)%(m))
 #define safe_mod(n, m) mod((n+m), m)
+#define getlow(n, len) (n-1 >= 0 ? n-1 : len-1)
+#define gethigh(n, len) (n+1 < len ? n+1 : 0)
 #define get_integral_row_left(left, center) (((left & 1) << 5)) | (center >> 3)
 #define get_integral_row_right(center, right) (((center & 0x1F) << 1) | (right & (1 << 7)) >> 7)
 
@@ -20,6 +22,7 @@ int xlen;
 int ylenpacked;
 
 pthread_barrier_t *barrier;
+int P = 8;
 
 struct packed_short{
     unsigned char pos0 : 4;
@@ -31,6 +34,8 @@ struct thread_work{
     int start;
     int end;
 };
+
+void barrier_wait();
 
 unsigned int get_integral_val_left(unsigned int nw, unsigned int n, unsigned int w, unsigned int c, unsigned int sw, unsigned int s) {
     unsigned int top = get_integral_row_left(nw, n);
@@ -137,10 +142,14 @@ static inline void perform_single_line(int xpos) {
           continue;
         }
         // non_skip_count++;
-        unsigned int lookupvalleft = get_integral_val_left(board1[xpos-1][k-1], board1[xpos-1][k], board1[xpos][k-1], board1[xpos][k], board1[xpos+1][k-1], board1[xpos+1][k]);
+        int up = getlow(xpos, xlen);
+        int down = gethigh(xpos, xlen);
+        int left = getlow(k, ylenpacked);
+        int right = gethigh(k, ylenpacked);
+        unsigned int lookupvalleft = get_integral_val_left(board1[up][left], board1[up][k], board1[xpos][left], board1[xpos][k], board1[down][left], board1[down][k]);
         unsigned char newvalleft = lookuptable[lookupvalleft];
         
-        unsigned int lookupvalright = get_integral_val_right(board1[xpos-1][k], board1[xpos-1][k+1], board1[xpos][k], board1[xpos][k+1], board1[xpos+1][k], board1[xpos+1][k+1]);
+        unsigned int lookupvalright = get_integral_val_right(board1[up][k], board1[up][right], board1[xpos][k], board1[xpos][right], board1[down][k], board1[down][right]);
         unsigned char newvalright = lookuptable[lookupvalright];
         
         // printf("Lookup val for x: %x, y: %d left is: %x\n", j, k, lookupvalleft);
@@ -186,7 +195,9 @@ void* thread_do_work(void* threadwork) {
         for (int j = work->start; j < work->end; j++) {
             perform_single_line(j);
         }
-        if (pthread_barrier_wait(barrier)) {
+        // pthread_barrier_wait(barrier);
+        barrier_wait();
+        if (work->start == 0) {
             unsigned char** temp;
             temp = dirty_bit1;
             dirty_bit1 = dirty_bit2;
@@ -206,7 +217,8 @@ void* thread_do_work(void* threadwork) {
             
             memcpy(cache_board1[j], cache_board2[j], ylenpacked);
         }
-        pthread_barrier_wait(barrier);
+      // pthread_barrier_wait(barrier);
+      barrier_wait();
     }
     return NULL;
 }
@@ -267,6 +279,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeMultithread_getNGenerationN
     dirty_bit2[xlen] = dirty_bit2[0];
     barrier = malloc(sizeof(pthread_barrier_t));
     threadcount = xlen < threadcount ? xlen : threadcount;
+    P = threadcount;
     int errorval = 0;
     if ((errorval = pthread_barrier_init(barrier, NULL, threadcount))) {
         printf("Barrier initialization failed with error %d, terminating\n", errorval);
@@ -291,3 +304,28 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeMultithread_getNGenerationN
     unpack_8(env, array, board1, xlen, ylenpacked);
     // printf("Skipped: %lu, didn't skip %lu\n", skip_count, non_skip_count);
     }
+int bar = 0; // Counter of threads, faced barrier.
+volatile int passed = 0; // Number of barriers, passed by all threads.
+
+void barrier_wait()
+{
+    int passed_old = passed; // Should be evaluated before incrementing *bar*!
+
+    if(__sync_fetch_and_add(&bar,1) == (P - 1))
+    {
+        // The last thread, faced barrier.
+        bar = 0;
+        // *bar* should be reseted strictly before updating of barriers counter.
+        __sync_synchronize(); 
+        passed++; // Mark barrier as passed.
+        // return 1;
+    }
+    else
+    {
+        // Not the last thread. Wait others.
+        while(passed == passed_old) {};
+        // Need to synchronize cache with other threads, passed barrier.
+        __sync_synchronize();
+        // return 0;
+    }
+}
