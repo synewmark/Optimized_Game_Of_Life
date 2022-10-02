@@ -52,7 +52,6 @@ unsigned int get_integral_val_right(unsigned int n, unsigned int ne, unsigned in
     // printf("center shift is: %x\n", ((s & 0x1F) << 1));
     // printf("right shift is: %x\n", ((se & (1 << 7)) >> 7));
     // printf("bot is: %x\n", bot);
-
     return ((top << 12) | (mid << 6) | bot);
 }
 
@@ -66,11 +65,11 @@ unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* y
   if (ylen % 8) {
     return NULL;
   }
-  unsigned char** board = malloc(sizeof(char*)*(xlen+2));
+  unsigned char** board = malloc(sizeof(char*)*(xlen));
   if (!board)  {
     return NULL;
   }
-  board = board+1;
+  board = board;
   for (int i = 0; i < xlen; i++) {
       jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
       jboolean isCopy = JNI_FALSE;
@@ -80,11 +79,11 @@ unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* y
           return NULL;
       }
       //pack
-      board[i] = calloc(sizeof(char), ylenpacked+2);
+      board[i] = calloc(sizeof(char), ylenpacked);
       if (!board[i]) {
         return NULL;
       }
-      board[i] = board[i]+1;
+      board[i] = board[i];
       // printf("board[%d] = %x\n", i, board[i]);
       for (int j = 0; j < ylenpacked; j++) {
         signed char c = 0;
@@ -94,13 +93,9 @@ unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* y
         }
         board[i][j] = c;
       }
-      board[i][-1] = board[i][ylenpacked-1];
-      board[i][ylenpacked] = board[i][0];
     (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
     //exiting critical
   }
-  board[-1] = board[xlen-1];
-  board[xlen] = board[0];
   return board;
 }
 
@@ -117,10 +112,10 @@ void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board, int xlen, 
         }
       }
       // printf("board[%d] = %x\n", i, board[i]);
-      free(board[i]-1);
+      free(board[i]);
       (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
     }
-    free(board-1);
+    free(board);
 }
 
 pthread_t* create_threads() {
@@ -162,20 +157,20 @@ static inline void perform_single_line(int xpos) {
         // printf("Center is: %x\n", board1[j][k]);
         // printf("Lookup result is: %x\n", newval);
         if (xc) {
-          dirty_bit2[xpos+1][k] = 1;
+          dirty_bit2[down][k] = 1;
           dirty_bit2[xpos][k] = 1;
-          dirty_bit2[xpos-1][k] = 1;
+          dirty_bit2[up][k] = 1;
 
           if (is_alive(xc, 0)) {
-            dirty_bit2[xpos+1][k+1] = 1;
-            dirty_bit2[xpos][k+1] = 1;
-            dirty_bit2[xpos-1][k+1] = 1;
+            dirty_bit2[down][right] = 1;
+            dirty_bit2[xpos][right] = 1;
+            dirty_bit2[up][right] = 1;
           }
 
           if (is_alive(xc, 7)) {
-            dirty_bit2[xpos+1][k-1] = 1;
-            dirty_bit2[xpos][k-1] = 1;
-            dirty_bit2[xpos-1][k-1] = 1;
+            dirty_bit2[down][left] = 1;
+            dirty_bit2[xpos][left] = 1;
+            dirty_bit2[up][left] = 1;
           }
           board2[xpos][k] = newval;
 
@@ -207,11 +202,11 @@ void* thread_do_work(void* threadwork) {
             board2 = temp;
         }
         for (int j = work->start; j < work->end; j++) {
-            cache_dirtybit2[j][0] |= cache_dirtybit2[j][ylenpacked];
-            cache_dirtybit2[j][ylenpacked-1] |= cache_dirtybit2[j][-1];
+            // cache_dirtybit2[j][0] |= cache_dirtybit2[j][ylenpacked];
+            // cache_dirtybit2[j][ylenpacked-1] |= cache_dirtybit2[j][-1];
 
-            cache_board2[j][-1] = cache_board2[j][ylenpacked-1];
-            cache_board2[j][ylenpacked] = cache_board2[j][0];
+            // cache_board2[j][-1] = cache_board2[j][ylenpacked-1];
+            // cache_board2[j][ylenpacked] = cache_board2[j][0];
 
             memset(cache_dirtybit1[j], 0, sizeof(char)*ylenpacked);
             
@@ -255,28 +250,23 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeMultithread_getNGenerationN
 
     ylenpacked = ylen/8;
     int ylenpackedhalf = ylen/2;
-    dirty_bit1 = malloc(sizeof(char*)*(xlen+2));
-    dirty_bit2 = malloc(sizeof(char*)*(xlen+2));
-    dirty_bit1 = dirty_bit1+1;
-    dirty_bit2 = dirty_bit2+1;
+    dirty_bit1 = malloc(sizeof(char*)*(xlen));
+    dirty_bit2 = malloc(sizeof(char*)*(xlen));
+    dirty_bit1 = dirty_bit1;
+    dirty_bit2 = dirty_bit2;
     for (int i = 0; i < xlen; i++) {
-      dirty_bit2[i] = calloc(ylenpacked+2, sizeof(char));
+      dirty_bit2[i] = calloc(ylenpacked, sizeof(char));
       if (!dirty_bit2[i]) {
         printf("Errno: %d\n", errno);
       }
-      dirty_bit2[i] = dirty_bit2[i]+1;
-      dirty_bit1[i] = malloc(sizeof(char)*(ylenpacked+2));
+      dirty_bit2[i] = dirty_bit2[i];
+      dirty_bit1[i] = malloc(sizeof(char)*(ylenpacked));
       if (!dirty_bit1[i]) {
         printf("Errno: %d\n", errno);
       }
-      dirty_bit1[i] = dirty_bit1[i]+1;
+      dirty_bit1[i] = dirty_bit1[i];
       memset(dirty_bit1[i], 1, sizeof(char)*ylenpacked);
     }
-    dirty_bit1[-1] = dirty_bit1[xlen-1];
-    dirty_bit2[-1] = dirty_bit2[xlen-1];
-
-    dirty_bit1[xlen] = dirty_bit1[0];
-    dirty_bit2[xlen] = dirty_bit2[0];
     barrier = malloc(sizeof(pthread_barrier_t));
     threadcount = xlen < threadcount ? xlen : threadcount;
     P = threadcount;
