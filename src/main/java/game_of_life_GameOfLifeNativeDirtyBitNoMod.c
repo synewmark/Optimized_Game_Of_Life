@@ -88,7 +88,6 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
     int ylenpacked = ylen/8;
     int ylenpackedhalf = ylen/2;
     int ylenpackeddouble = ylenpacked/8 + (ylenpacked%8 != 0);
-    // int ylenpackedextra = ylenpacked/8 + ylenpacked%8!=0;
     struct packed_short** buffer = malloc(sizeof(struct packed_short*)*(xlen+2));
     struct packed_short** buffer2 = malloc(sizeof(struct packed_short*)*(xlen+2));
     buffer = buffer+1;
@@ -253,7 +252,6 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
           // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+7, buffer[j][k*4+3].pos1, is_alive(board[j][k], 7));
           if(!is_alive(dirty_bit1[j][k/8], k%8)) {
             skip_count++;
-            // printf("skipping work gen %d, x: %d, y: %d\n", i, j, k);
             continue;
           }
           non_skip_count++;
@@ -275,17 +273,10 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
           c+=(buffer[j][k*4].pos0 == 3 || (buffer[j][k*4].pos0 == 2 && is_alive(board[j][k], 0)));
           
           signed char xc = c^board[j][k];
-          // printf("Finished 1\n");
-          // printf("Started 2 %d %d %x", j, k, dirty_bit2[j]);
-
 
           if (xc) {
-            // printf("k is: %d\n",k);
-            // printf("setting dirty: %x\n", xc);
             set_alive(dirty_bit2[j+1][k/8], k%8);
-            // printf("done setting dirty: %x\n", xc);
             set_alive(dirty_bit2[j][k/8], k%8);
-
             set_alive(dirty_bit2[j-1][k/8], k%8);
 
             if (is_alive(xc, 0)) {
@@ -293,17 +284,15 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
               set_alive(dirty_bit2[j][k/8-(k%8==0)], safe_mod(k-1, 8));
               set_alive(dirty_bit2[j-1][k/8-(k%8==0)], safe_mod(k-1, 8));
             }
+
             if (is_alive(xc, 7)) {
               set_alive(dirty_bit2[j+1][k/8+(k%8==7)], mod(k+1, 8));
               set_alive(dirty_bit2[j][k/8+(k%8==7)], mod(k+1, 8));
               set_alive(dirty_bit2[j-1][k/8+(k%8==7)], mod(k+1, 8));
             }
-            // for (int l = 0; l < 4; l++) {
+
             if(is_alive(xc, 0)) {
               signed char delta = is_alive(c, 0) ? 1 : -1;
-              // if (safe_mod((k*4)-1, ylenpackedhalf) != (k*4-1)) {
-              //   printf("Not equal, j is: %d, k is: %d\n", j, k*4-1);
-              // }
               buffer2[j-1][(k*4)-1].pos1+=delta;
               buffer2[j-1][(k*4)].pos0+=delta;
               buffer2[j-1][(k*4)].pos1+=delta;
@@ -354,7 +343,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
               buffer2[j+1][(k*4)+1].pos1+=delta;
               buffer2[j+1][(k*4)+1+1].pos0+=delta;
             }
-              if(is_alive(xc, 4)) {
+            if(is_alive(xc, 4)) {
               signed char delta = is_alive(c, 4) ? 1 : -1;
               buffer2[j-1][(k*4)+2-1].pos1+=delta;
               buffer2[j-1][(k*4)+2].pos0+=delta;
@@ -380,7 +369,7 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
               buffer2[j+1][(k*4)+2].pos1+=delta;
               buffer2[j+1][(k*4)+2+1].pos0+=delta;
             }
-              if(is_alive(xc, 6)) {
+            if(is_alive(xc, 6)) {
               signed char delta = is_alive(c, 6) ? 1 : -1;
               buffer2[j-1][(k*4)+3-1].pos1+=delta;
               buffer2[j-1][(k*4)+3].pos0+=delta;
@@ -397,7 +386,6 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
               signed char delta = is_alive(c, 7) ? 1 : -1;
               buffer2[j-1][(k*4)+3].pos0+=delta;
               buffer2[j-1][(k*4)+3].pos1+=delta;
-              // printf("!y is: %d y-incr: %d\n", k*4+l, mod((k+l)/2+1, ylenpackedhalf));
               buffer2[j-1][(k*4)+3+1].pos0+=delta;
 
               buffer2[j][(k*4)+3].pos0+=delta;
@@ -409,7 +397,6 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeNativeDirtyNoMod_getNGenera
             }
             board[j][k] = c;
           }
-          // printf("Finished 2 %d %d \n", j, k);
         }
       }
       signed char** temp = buffer2;
