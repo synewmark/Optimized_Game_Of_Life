@@ -13,3 +13,5 @@ Currently have 6 techniques each improving off the other:
 6. Native Dirty No Mod
 
 Check out Project Proposal.pdf for the full details or Results.pdf just for the results.
+
+Also, special thanks to Akiva Cooper [@akivacooper](https://github.com/akivacooper) for his constant inspiration and emotional support
