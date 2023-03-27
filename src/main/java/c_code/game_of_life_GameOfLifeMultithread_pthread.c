@@ -3,9 +3,11 @@
  * JNI implementation for a hyper-optimized Conway's Game of Life
  * 
  * @author Shmuel Newmark <https://github.com/synewmark>
+ * Except barrier_wait() which was taken from User Tsyvarev on StackOveflow: 
+ * https://stackoverflow.com/questions/33598686/spinning-thread-barrier-using-atomic-builtins
  * 
  * @details
- * Code packs 8 booleans into a single char value (see <pack_8>"()", and <unpack_8>"()" methods)
+ * Code packs 8 booleans into a single char value (@see pack_8(), and unpack_8() methods)
  * 
  * For example a boolean array like this:
  * [0] [1] [2] [3] [4] [5] [6] [7] [8] ... 
@@ -45,7 +47,7 @@
  * We'll use the int value of both of these bit strings as indices on our lookup table
  * 
  * Code favors speed over clarity for all innermost loop functions:
- * <get_integral_val_left>"()", <get_integral_val_right>"()", <perform_single_line>"()", <thread_do_work>"()"
+ * @see get_integral_val_left(), get_integral_val_right(), perform_single_line(), thread_do_work()
  */
 
 #include <stdlib.h>
@@ -155,7 +157,7 @@ static int pack_8(JNIEnv * env, jobjectArray array, unsigned char** board) {
       for (int j = 0; j < ylenpacked; j++) {
         unsigned char c = 0;
         // This places the lowest bit as the most significant
-        // See @details
+        // @see @details
         for (int k = 0; k < 8; k++) {
           c<<=1;
           c+=(boolElementsi[j*8+k]);
@@ -186,7 +188,7 @@ static void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board){
           boolElementsi[j*8+(7-k)] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
           // We want to put the value in k-7 because we reversed the bits when packing
           // So we need to un-reverse the bits when unpacking
-          // See @details
+          // @see @details
         }
       }
       (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
@@ -379,15 +381,16 @@ JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeMultithread_getNGenerationN
   free_all_resources();
 }
 
-// Barrier code is taken from: https://stackoverflow.com/questions/33598686/spinning-thread-barrier-using-atomic-builtins
+// Barrier code is taken from User Tsyvarev: 
+// https://stackoverflow.com/questions/33598686/spinning-thread-barrier-using-atomic-builtins
 
 // Because we're saturating the cores and denying multitasking, there's no reason to sleep on waits
-// So we're busy waiting instead to squeeze out a bit more performance
+// So we're busy-waiting instead to squeeze out a bit more performance
 
 int bar = 0; // Counter of threads, faced barrier.
 volatile int passed = 0; // Number of barriers, passed by all threads.
 
-// Due to __sync instructions, code is GCC/Clang dependant
+// Due to __sync primitives, code is GCC/Clang dependant
 static void barrier_wait()
 {
     int passed_old = passed; // Should be evaluated before incrementing *bar*!
