@@ -2,7 +2,7 @@ package game_of_life;
 
 public class GameOfLifeNativePacked extends GameOfLifeAbstract {
 	static {
-		System.loadLibrary("native_packed");
+		System.loadLibrary("binary/" + "native_packed");
 	}
 	private final static String name = "Native Packed Technique";
 	private final static String description = "For loop check each adjacent";

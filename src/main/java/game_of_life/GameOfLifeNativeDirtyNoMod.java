@@ -2,7 +2,7 @@ package game_of_life;
 
 public class GameOfLifeNativeDirtyNoMod extends GameOfLifeAbstract {
 	static {
-		System.loadLibrary("native_dirty_nomod");
+		System.loadLibrary("binary/" + "native_dirty_nomod");
 	}
 	private final static String name = "Native Dirty Technique";
 	private final static String description = "For loop check each adjacent";

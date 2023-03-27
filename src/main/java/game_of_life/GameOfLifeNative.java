@@ -2,7 +2,7 @@ package game_of_life;
 
 public class GameOfLifeNative extends GameOfLifeAbstract {
 	static {
-		System.loadLibrary("native");
+		System.loadLibrary("binary/" + "native");
 	}
 	private final static String name = "Native Technique";
 	private final static String description = "For loop check each adjacent";

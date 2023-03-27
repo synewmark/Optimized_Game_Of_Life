@@ -2,7 +2,7 @@ package game_of_life;
 
 public class GameOfLifeLookup extends GameOfLifeAbstract {
 	static {
-		System.loadLibrary("native_lookup");
+		System.loadLibrary("binary/" + "native_lookup");
 	}
 	private final static String name = "Native Technique";
 	private final static String description = "For loop check each adjacent";
@@ -23,7 +23,6 @@ public class GameOfLifeLookup extends GameOfLifeAbstract {
 		if (lookuptable == null) {
 			lookuptable = generateLookup();
 		}
-//		System.out.println(lookuptable[0x808080]);
 		getNGenerationNative(lookuptable, n, temp);
 		return temp;
 	}
