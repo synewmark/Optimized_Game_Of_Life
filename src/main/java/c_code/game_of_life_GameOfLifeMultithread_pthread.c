@@ -1,12 +1,23 @@
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
-#include "game_of_life_GameOfLifeMultithread.h"
 /**
+ * @brief
+ * JNI implementation for a hyper-optimized Conway's Game of Life
+ * 
+ * @author Shmuel Newmark <https://github.com/synewmark>
+ * 
+ * @details
+ * Code packs 8 booleans into a single char value (see <pack_8>"()", and <unpack_8>"()" methods)
+ * 
+ * For example a boolean array like this:
+ * [0] [1] [2] [3] [4] [5] [6] [7] [8] ... 
+ * ..0 ..0 ..1 ..0 ..1 ..0 ..1 ..1 ..1 ...
+ * Will turn into:
+ *   [0]        [1]
+ * 00101011  1.......
+ * 
  * #IMPORTANT# Throughout code, "leftmost" bit is the highest bit and "rightmost" is lowest
  * However, the lowest value on the array is left and highest is right
- * This means of a given bit, the right value is always one higher bit of memory and vice versa for left
- * Doing it this way simplifies merging values, but is not necessarily unintuitive
+ * Because numerical values are usually read most sig to least, this simplifies
+ * the intuition when it comes to merging values but must be kept consistent
  * 
  * Code uses a "lookup table" to calculate values
  * Lookup is done 18 bits at a time as a 6x3.
@@ -32,17 +43,26 @@
  * 10010 0
  * As a string: 010111001011100100
  * We'll use the int value of both of these bit strings as indices on our lookup table
+ * 
+ * Code favors speed over clarity for all innermost loop functions:
+ * <get_integral_val_left>"()", <get_integral_val_right>"()", <perform_single_line>"()", <thread_do_work>"()"
  */
+
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include "game_of_life_GameOfLifeMultithread.h"
 
 #define is_alive(char, pos) ((1 << (pos)) & (char))
 #define set_alive(char, pos) (char |= (1 << (pos)))
+// Don't use mod for wrapping because division is too expensive
 #define get_low(n, len) (n-1 >= 0 ? n-1 : len-1)
 #define get_high(n, len) (n+1 < len ? n+1 : 0)
 // Step 1 for left: get the 5 left bits and the rightmost bit on the one to the left
 #define get_integral_row_left(left, center) (((left & 1) << 5)) | (center >> 3)
 // Step 1 for right: get the 5 right bits and the leftmost bit on the one to the right
 #define get_integral_row_right(center, right) (((center & 0x1F) << 1) | (right & (1 << 7)) >> 7)
-#define swap(x, y) ({unsigned char** _temp = x; x = y; y =_temp;})
+#define swap_board(x, y) ({unsigned char** _temp = x; x = y; y =_temp;})
 
 
 jbyte* lookuptable = NULL;
@@ -68,7 +88,7 @@ static void barrier_wait();
 
 static void* safe_calloc(size_t NumOfElements, size_t SizeOfElements) {
   // malloc family can return NULL for 0 allocs
-  // Want to distinguish between a failure and succesful 0 allocation
+  // Want to distinguish between a failure and a "succesful" 0 allocation
   if (!NumOfElements || !SizeOfElements) {
     return NULL;
   }
@@ -134,6 +154,8 @@ static int pack_8(JNIEnv * env, jobjectArray array, unsigned char** board) {
       //pack 8 boolean values into each char
       for (int j = 0; j < ylenpacked; j++) {
         unsigned char c = 0;
+        // This places the lowest bit as the most significant
+        // See @details
         for (int k = 0; k < 8; k++) {
           c<<=1;
           c+=(boolElementsi[j*8+k]);
@@ -146,13 +168,25 @@ static int pack_8(JNIEnv * env, jobjectArray array, unsigned char** board) {
   return 0;
 }
 
-static void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board, int xlen, int ylenpacked){
+static void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board){
   for (int i = 0; i < xlen; i++) {
       jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
       jboolean* boolElementsi = (*env)->GetPrimitiveArrayCritical(env, boolArrayi, 0);
       for (int j = 0; j < ylenpacked; j++) {
         for (int k = 0; k < 8; k++) {
-            boolElementsi[j*8+(7-k)] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
+          /** We cannot simply mask and place back into the array because Java only reliably treats values with the lowest bit set as true
+          * Somewhat amusingly, not doing this creates less problems than you might imagine
+          * in my case failing to do so still had comparing individual values perform as expected
+          * printing the values also printed True no matter which bit was set and False otherwise
+          * It was only when I used Arrays.equals() that it broke
+          * This isn't exactly shocking: a compare should really just be a xor or a test
+          * whereas an arrays.equals would be optimized to a streaming extension
+          * it's just a good example of how undefined behavior doesn't mean "blows up in your face immediately"
+          */
+          boolElementsi[j*8+(7-k)] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
+          // We want to put the value in k-7 because we reversed the bits when packing
+          // So we need to un-reverse the bits when unpacking
+          // See @details
         }
       }
       (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
@@ -177,6 +211,7 @@ static inline unsigned int get_integral_val_right(unsigned int n, unsigned int n
 }
 // Very performance sensitive: runs g*x times
 static inline void perform_single_line(int xpos, unsigned char** board1, unsigned char** board2, unsigned char** dirty_bit1, unsigned char** dirty_bit2) {
+  // inner loop runs: runs g*x*y times
   for (int i = 0; i < ylenpacked; i++) {
         // If dirty bit is clear we don't run
         if(!dirty_bit1[xpos][i]) {
@@ -230,19 +265,18 @@ void* thread_do_work(void* threadwork) {
   unsigned char** cache_board2 = board2;
   unsigned char** cache_dirtybit1 = dirty_bit1;
   unsigned char** cache_dirtybit2 = dirty_bit2;
-  // return NULL;
-  // printf("Starting thread from %d to %d\n", work->start, work->end);
+  // Somewhat performace sensitive: each barrier_wait runs g times
   for (int i = 0; i < work->genlength; i++) {
     for (int j = work->start; j < work->end; j++) {
         perform_single_line(j, cache_board1, cache_board2, cache_dirtybit1, cache_dirtybit2);
     }
     barrier_wait();
-    swap(cache_board1, cache_board2);
-    swap(cache_dirtybit1, cache_dirtybit2);
+    swap_board(cache_board1, cache_board2);
+    swap_board(cache_dirtybit1, cache_dirtybit2);
     for (int j = work->start; j < work->end; j++) {
       // clear all dirty bits after reading them
       // The big drawback of the approach is that it requires 2 barrier waits
-      // because we risk clearing the bits while another thread is reading them
+      // Otherwise we risk clearing the bits while another thread is reading them
       memset(cache_dirtybit2[j], 0, ylenpacked);
     }
     barrier_wait();
@@ -337,10 +371,10 @@ static int initialize_all_resources(JNIEnv* env, jint threadcount, jbyteArray lo
 
 JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeMultithread_getNGenerationNative
   (JNIEnv* env, jobject object, jint threadcount, jbyteArray lookup, jint runlength, jobjectArray array) {
-  
+  printf("Running for %d generations!\n", runlength);
   if (!initialize_all_resources(env, threadcount, lookup, runlength, array)) {
     unsigned char** finalboard = runlength % 2 ? board2 : board1;  
-    unpack_8(env, array, finalboard, xlen, ylenpacked);
+    unpack_8(env, array, finalboard);
   }
   free_all_resources();
 }
