@@ -1,33 +1,62 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-
 #include "game_of_life_GameOfLifeMultithread.h"
+/**
+ * #IMPORTANT# Throughout code, "leftmost" bit is the highest bit and "rightmost" is lowest
+ * However, the lowest value on the array is left and highest is right
+ * This means of a given bit, the right value is always one higher bit of memory and vice versa for left
+ * Doing it this way simplifies merging values, but is not necessarily unintuitive
+ * 
+ * Code uses a "lookup table" to calculate values
+ * Lookup is done 18 bits at a time as a 6x3.
+ * Because we're storing values packed in 8 bits this requires 2 lookups
+ * For example suppose the following section of a life board:
+ * ... ........ ...
+ * ..0 00101011 1..
+ * ..1 10100101 1..
+ * ..1 01010010 0..
+ * ... ........ ...
+ * If we wanted to lookup the value of the middle row we'd need to follow 2 steps
+ * Step 1. split the row in half and attach the adjacent values on either side
+ * For the left value that would look like:
+ * 1 10100
+ * But we also need to the row on top and bottom so,
+ * 0 00101
+ * 1 10100
+ * 1 01010
+ * Step 2. we'd need to combine those into a single bit string: 000101110100101010
+ * Same deal for the right:
+ * 01011 1
+ * 00101 1
+ * 10010 0
+ * As a string: 010111001011100100
+ * We'll use the int value of both of these bit strings as indices on our lookup table
+ */
 
 #define is_alive(char, pos) ((1 << (pos)) & (char))
 #define set_alive(char, pos) (char |= (1 << (pos)))
-#define mod(n, m) ((n)%(m))
-#define safe_mod(n, m) mod((n+m), m)
-#define getlow(n, len) (n-1 >= 0 ? n-1 : len-1)
-#define gethigh(n, len) (n+1 < len ? n+1 : 0)
+#define get_low(n, len) (n-1 >= 0 ? n-1 : len-1)
+#define get_high(n, len) (n+1 < len ? n+1 : 0)
+// Step 1 for left: get the 5 left bits and the rightmost bit on the one to the left
 #define get_integral_row_left(left, center) (((left & 1) << 5)) | (center >> 3)
+// Step 1 for right: get the 5 right bits and the leftmost bit on the one to the right
 #define get_integral_row_right(center, right) (((center & 0x1F) << 1) | (right & (1 << 7)) >> 7)
+#define swap(x, y) ({unsigned char** _temp = x; x = y; y =_temp;})
 
-jbyte* lookuptable;
-unsigned char** board1;
-unsigned char** board2;
-unsigned char** dirty_bit1;
-unsigned char** dirty_bit2;
+
+jbyte* lookuptable = NULL;
+unsigned char** board1 = NULL;
+unsigned char** board2 = NULL;
+unsigned char** dirty_bit1 = NULL;
+unsigned char** dirty_bit2 = NULL;
+
+
 int xlen;
+int ylen;
 int ylenpacked;
 
-pthread_barrier_t *barrier;
-int P = 8;
-
-struct packed_short{
-    unsigned char pos0 : 4;
-    unsigned char pos1 : 4;
-};
+int global_thread_count = 8;
 
 struct thread_work{
     int genlength;
@@ -35,58 +64,76 @@ struct thread_work{
     int end;
 };
 
-void barrier_wait();
+static void barrier_wait();
 
-unsigned int get_integral_val_left(unsigned int nw, unsigned int n, unsigned int w, unsigned int c, unsigned int sw, unsigned int s) {
-    unsigned int top = get_integral_row_left(nw, n);
-    unsigned int mid = get_integral_row_left(w, c);
-    unsigned int bot = get_integral_row_left(sw, s);
-    return ((top << 12) | (mid << 6) | bot);
+static void* safe_calloc(size_t NumOfElements, size_t SizeOfElements) {
+  // malloc family can return NULL for 0 allocs
+  // Want to distinguish between a failure and succesful 0 allocation
+  if (!NumOfElements || !SizeOfElements) {
+    return NULL;
+  }
+  errno = 0;
+  void* result = calloc(NumOfElements, SizeOfElements);
+  if (!result) {
+    printf("Calloc of size %lld failed with code: %d\n", NumOfElements*SizeOfElements, errno);
+  }
+  return result;
 }
 
-unsigned int get_integral_val_right(unsigned int n, unsigned int ne, unsigned int c, unsigned int e, unsigned int s, unsigned int se) {
-    unsigned int top = get_integral_row_right(n, ne);
-    unsigned int mid = get_integral_row_right(c, e);
-    unsigned int bot = get_integral_row_right(s, se);
-    // printf("center is: %x\n", s);
-    // printf("center shift is: %x\n", ((s & 0x1F) << 1));
-    // printf("right shift is: %x\n", ((se & (1 << 7)) >> 7));
-    // printf("bot is: %x\n", bot);
-    return ((top << 12) | (mid << 6) | bot);
+static void free2d(int x, unsigned char** array) {
+  if (!array) {
+    return;
+  }
+  for (int i = 0; i < x; i++) {
+    if (!array[i]) {
+      return;
+    }
+    free(array[i]);
+  }
+  free(array);
 }
 
-unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* ylen_store) {
-  const jsize xlen = (*env)->GetArrayLength(env, array);
-  jobjectArray dim1 = (*env)->GetObjectArrayElement(env, array, 0); 
-  const jsize ylen = (*env)->GetArrayLength(env, dim1);
-  const jsize ylenpacked = ylen/8;
+static unsigned char** malloc2d(int x, int y) {
+  unsigned char** board = safe_calloc(x, sizeof(*board));
+  if (!board) {
+    return NULL;
+  }
+  for (int i = 0; i < x; i++) {
+    if (!(board[i] = safe_calloc(y, sizeof(*board[i])))) {
+      free2d(x, board);
+      return NULL;
+    }
+  }
+  return board;
+}
+
+static int set_length_values(JNIEnv * env, jobjectArray array, int* xlen_store, int* ylen_store, int* ylenpacked_store) {
+  // Caller ensures the array is not of 0 length and is a square 
+  // so we just need the x and any y lengths
+  int xlen = (*env)->GetArrayLength(env, array);
+  jobjectArray dim1 = (*env)->GetObjectArrayElement(env, array, 0);
+  int ylen = (*env)->GetArrayLength(env, dim1);
+  if (ylen % 8) {
+    return -1;
+  }
   *xlen_store = xlen;
   *ylen_store = ylen;
-  if (ylen % 8) {
-    return NULL;
-  }
-  unsigned char** board = malloc(sizeof(char*)*(xlen));
-  if (!board)  {
-    return NULL;
-  }
-  board = board;
+  *ylenpacked_store = ylen/8;
+  return 0;
+}
+
+static int pack_8(JNIEnv * env, jobjectArray array, unsigned char** board) {
   for (int i = 0; i < xlen; i++) {
       jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
       jboolean isCopy = JNI_FALSE;
       //entering critical
       jboolean* boolElementsi = (*env)->GetPrimitiveArrayCritical(env, boolArrayi, &isCopy);
       if (isCopy) {
-          return NULL;
+          return -1;
       }
-      //pack
-      board[i] = calloc(sizeof(char), ylenpacked);
-      if (!board[i]) {
-        return NULL;
-      }
-      board[i] = board[i];
-      // printf("board[%d] = %x\n", i, board[i]);
+      //pack 8 boolean values into each char
       for (int j = 0; j < ylenpacked; j++) {
-        signed char c = 0;
+        unsigned char c = 0;
         for (int k = 0; k < 8; k++) {
           c<<=1;
           c+=(boolElementsi[j*8+k]);
@@ -96,70 +143,70 @@ unsigned char** pack_8(JNIEnv * env, jobjectArray array, int* xlen_store, int* y
     (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
     //exiting critical
   }
-  return board;
+  return 0;
 }
 
-void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board, int xlen, int ylenpacked){
+static void unpack_8(JNIEnv* env, jobjectArray array, unsigned char** board, int xlen, int ylenpacked){
   for (int i = 0; i < xlen; i++) {
       jbooleanArray boolArrayi = (*env)->GetObjectArrayElement(env, array, i);
       jboolean* boolElementsi = (*env)->GetPrimitiveArrayCritical(env, boolArrayi, 0);
       for (int j = 0; j < ylenpacked; j++) {
-        if (board[i][j]) {
-          // printf("not blank!");
-        }
         for (int k = 0; k < 8; k++) {
             boolElementsi[j*8+(7-k)] = is_alive(board[i][j], k) ? JNI_TRUE : JNI_FALSE;
         }
       }
-      // printf("board[%d] = %x\n", i, board[i]);
-      free(board[i]);
       (*env)->ReleasePrimitiveArrayCritical(env, boolArrayi, boolElementsi, 0);
     }
-    free(board);
 }
 
-pthread_t* create_threads() {
-    return NULL;
+// Very performance sensitive: Runs g*x*(y/8) times
+static inline unsigned int get_integral_val_left(unsigned int nw, unsigned int n, unsigned int w, unsigned int c, unsigned int sw, unsigned int s) {
+    unsigned int top = get_integral_row_left(nw, n);
+    unsigned int mid = get_integral_row_left(w, c);
+    unsigned int bot = get_integral_row_left(sw, s);
+    // Step 2: combine all 3 rows into a single bit string
+    return ((top << 12) | (mid << 6) | bot);
 }
-
-static inline void perform_single_line(int xpos) {
-  for (int k = 0; k < ylenpacked; k++) {
-        // printf("\nx: %d, y: %d, count: %d, alive: %d\n", j, k*8, buffer[j][k*4].pos0, is_alive(board[j][k], 0));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+1, buffer[j][k*4].pos1, is_alive(board[j][k], 1));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+2, buffer[j][k*4+1].pos0, is_alive(board[j][k], 2));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+3, buffer[j][k*4+1].pos1, is_alive(board[j][k], 3));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+4, buffer[j][k*4+2].pos0, is_alive(board[j][k], 4));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+5, buffer[j][k*4+2].pos1, is_alive(board[j][k], 5));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+6, buffer[j][k*4+3].pos0, is_alive(board[j][k], 6));
-        // printf("x: %d, y: %d, count: %d, alive: %d\n", j, k*8+7, buffer[j][k*4+3].pos1, is_alive(board[j][k], 7));
-        if(!dirty_bit1[xpos][k]) {
-          // skip_count++;
+// Very performance sensitive: Runs g*x*(y/8) times
+static inline unsigned int get_integral_val_right(unsigned int n, unsigned int ne, unsigned int c, unsigned int e, unsigned int s, unsigned int se) {
+    unsigned int top = get_integral_row_right(n, ne);
+    unsigned int mid = get_integral_row_right(c, e);
+    unsigned int bot = get_integral_row_right(s, se);
+    // Step 2: combine all 3 rows into a single bit string
+    return ((top << 12) | (mid << 6) | bot);
+}
+// Very performance sensitive: runs g*x times
+static inline void perform_single_line(int xpos, unsigned char** board1, unsigned char** board2, unsigned char** dirty_bit1, unsigned char** dirty_bit2) {
+  for (int i = 0; i < ylenpacked; i++) {
+        // If dirty bit is clear we don't run
+        if(!dirty_bit1[xpos][i]) {
           continue;
         }
-        // non_skip_count++;
-        int up = getlow(xpos, xlen);
-        int down = gethigh(xpos, xlen);
-        int left = getlow(k, ylenpacked);
-        int right = gethigh(k, ylenpacked);
-        unsigned int lookupvalleft = get_integral_val_left(board1[up][left], board1[up][k], board1[xpos][left], board1[xpos][k], board1[down][left], board1[down][k]);
+        // Watch for over and underflow when wrapping
+        int up = get_low(xpos, xlen);
+        int down = get_high(xpos, xlen);
+        int left = get_low(i, ylenpacked);
+        int right = get_high(i, ylenpacked);
+        // Split the lookup into 2 request: left and right
+        // Each request is 18 bits, or 6 for each row
+        unsigned int lookupvalleft = get_integral_val_left(board1[up][left], board1[up][i], board1[xpos][left], board1[xpos][i], board1[down][left], board1[down][i]);
         unsigned char newvalleft = lookuptable[lookupvalleft];
         
-        unsigned int lookupvalright = get_integral_val_right(board1[up][k], board1[up][right], board1[xpos][k], board1[xpos][right], board1[down][k], board1[down][right]);
+        unsigned int lookupvalright = get_integral_val_right(board1[up][i], board1[up][right], board1[xpos][i], board1[xpos][right], board1[down][i], board1[down][right]);
         unsigned char newvalright = lookuptable[lookupvalright];
-        
-        // printf("Lookup val for x: %x, y: %d left is: %x\n", j, k, lookupvalleft);
-        // printf("Lookup val for x: %x, y: %d right is: %x\n", j, k, lookupvalright);
-        // printf("Lookup val result left: %x\n", newvalleft);
-        // printf("Lookup val result right: %x\n", newvalright);
 
         unsigned char newval = (newvalleft << 4) | newvalright;
-        char xc = newval^board1[xpos][k];
-        // printf("Center is: %x\n", board1[j][k]);
-        // printf("Lookup result is: %x\n", newval);
+        char xc = newval^board1[xpos][i];
+        
+        // Set all dirty bits around the just changed value
+        // Even though we may have a race condition on access it's safe 
+        // because char access is atomic and we're only ever setting them, never clearing
+        // If there's any difference between the curr and prev value we must set the dirty on the ones above and below
+        // But we only need to set the left and right dirty values if the left and right most values were changed
         if (xc) {
-          dirty_bit2[down][k] = 1;
-          dirty_bit2[xpos][k] = 1;
-          dirty_bit2[up][k] = 1;
+          dirty_bit2[down][i] = 1;
+          dirty_bit2[xpos][i] = 1;
+          dirty_bit2[up][i] = 1;
 
           if (is_alive(xc, 0)) {
             dirty_bit2[down][right] = 1;
@@ -172,136 +219,146 @@ static inline void perform_single_line(int xpos) {
             dirty_bit2[xpos][left] = 1;
             dirty_bit2[up][left] = 1;
           }
-          board2[xpos][k] = newval;
-
         }
+        board2[xpos][i] = newval;
       }
 }
 
 void* thread_do_work(void* threadwork) {
-    struct thread_work* work = (struct thread_work*) threadwork;
-    // printf("Starting thread from %d to %d\n", work->start, work->end);
-    for (int i = 0; i < work->genlength; i++) {
-        unsigned char** cache_board1 = board1;
-        unsigned char** cache_board2 = board2;
-        unsigned char** cache_dirtybit1 = dirty_bit1;
-        unsigned char** cache_dirtybit2 = dirty_bit2;
-
-        for (int j = work->start; j < work->end; j++) {
-            perform_single_line(j);
-        }
-        // pthread_barrier_wait(barrier);
-        barrier_wait();
-        if (work->start == 0) {
-            unsigned char** temp;
-            temp = dirty_bit1;
-            dirty_bit1 = dirty_bit2;
-            dirty_bit2 = temp;
-            temp = board1;
-            board1 = board2;
-            board2 = temp;
-        }
-        for (int j = work->start; j < work->end; j++) {
-            // cache_dirtybit2[j][0] |= cache_dirtybit2[j][ylenpacked];
-            // cache_dirtybit2[j][ylenpacked-1] |= cache_dirtybit2[j][-1];
-
-            // cache_board2[j][-1] = cache_board2[j][ylenpacked-1];
-            // cache_board2[j][ylenpacked] = cache_board2[j][0];
-
-            memset(cache_dirtybit1[j], 0, sizeof(char)*ylenpacked);
-            
-            memcpy(cache_board1[j], cache_board2[j], ylenpacked);
-        }
-      // pthread_barrier_wait(barrier);
-      barrier_wait();
+  struct thread_work* work = (struct thread_work*) threadwork;
+  unsigned char** cache_board1 = board1;
+  unsigned char** cache_board2 = board2;
+  unsigned char** cache_dirtybit1 = dirty_bit1;
+  unsigned char** cache_dirtybit2 = dirty_bit2;
+  // return NULL;
+  // printf("Starting thread from %d to %d\n", work->start, work->end);
+  for (int i = 0; i < work->genlength; i++) {
+    for (int j = work->start; j < work->end; j++) {
+        perform_single_line(j, cache_board1, cache_board2, cache_dirtybit1, cache_dirtybit2);
     }
-    return NULL;
+    barrier_wait();
+    swap(cache_board1, cache_board2);
+    swap(cache_dirtybit1, cache_dirtybit2);
+    for (int j = work->start; j < work->end; j++) {
+      // clear all dirty bits after reading them
+      // The big drawback of the approach is that it requires 2 barrier waits
+      // because we risk clearing the bits while another thread is reading them
+      memset(cache_dirtybit2[j], 0, ylenpacked);
+    }
+    barrier_wait();
+  }
+  return NULL;
+}
+
+static int initialize_boards(JNIEnv* env, jobjectArray array) {
+  board1 = malloc2d(xlen, ylenpacked);
+  if (!board1) {        
+    printf("Indeterminate error, terminating\n");
+    return -1;
+  }
+  if (pack_8(env, array, board1)) {
+    printf("Indeterminate error, terminating\n");
+    return -1;
+  }
+  board2 = malloc2d(xlen, ylenpacked);
+  if (!board2) {
+    printf("Indeterminate error, terminating\n"); 
+    return -1;
+  }
+  return 0;
+}
+
+static int initialize_dirty_bits(int xlen, int ylenpacked) {
+  dirty_bit1 = malloc2d(xlen, ylenpacked);
+  if (!dirty_bit1) {
+    return -1;
+  }
+  // turn on all dirty bits on the first run so nothing gets skipped
+  for (int i = 0; i < xlen; i++) {
+    memset(dirty_bit1[i], 0xFF, ylenpacked);
+  }
+
+  dirty_bit2 = malloc2d(xlen, ylenpacked);
+  if (!dirty_bit2) {
+    return -1;
+  }
+  return 0;
+}
+
+static void initialize_lookup_table(JNIEnv* env, jarray array) {
+  lookuptable = (*env)->GetPrimitiveArrayCritical(env, array, NULL);
+}
+
+static void free_all_resources() {
+  free2d(xlen, board1);
+  free2d(xlen, board2);
+  free2d(xlen, dirty_bit1);
+  free2d(xlen, dirty_bit2);
+}
+
+static int do_all_thread_work(int threadcount, int runlength) {
+  // Each thread works on it's own x range, no reason to make more threads than xlen
+  global_thread_count = xlen < threadcount ? xlen : threadcount;
+  struct thread_work workpool[global_thread_count];
+  int startwork = 0;
+  for (int i = 0; i < global_thread_count-1; i++) {
+    // If there are more threads
+    int amountofwork = (xlen/global_thread_count) + ((xlen%global_thread_count) > i);
+    workpool[i] = (struct thread_work) {runlength, startwork, startwork+amountofwork};
+    // The possibility of some threads being created succesfully, but choking on the rest is unhandled
+    int error;
+    if ((error = (pthread_create(NULL, 0, thread_do_work, workpool+i)))) {
+      printf("Creating thread: %d failed with code: %d\n", i+1, error);
+      return -1;
+    }
+    startwork+=amountofwork;
+  }
+  int amountofwork = (xlen/global_thread_count);
+  struct thread_work finalwork = (struct thread_work) {runlength, startwork, startwork+amountofwork};
+  thread_do_work(&finalwork);
+  return 0;
+}
+
+static int initialize_all_resources(JNIEnv* env, jint threadcount, jbyteArray lookup, jint runlength, jobjectArray array) {
+  if (set_length_values(env, array, &xlen, &ylen, &ylenpacked)) {
+    printf("Array must have a y size divisable by 8\n");
+    return -1;
+  }
+  if (initialize_boards(env, array)) {
+    return -1;
+  }
+  if (initialize_dirty_bits(xlen, ylenpacked)) {
+    return -1;
+  }
+  initialize_lookup_table(env, lookup);
+  do_all_thread_work(threadcount, runlength);
+  return 0;
 }
 
 JNIEXPORT void JNICALL Java_game_1of_1life_GameOfLifeMultithread_getNGenerationNative
-  (JNIEnv * env, jobject object, jint threadcount, jbyteArray lookup, jint runlength, jobjectArray array) {
-    unsigned long long skip_count = 0;
-    unsigned long long non_skip_count = 0;
-    int num = 0;
-    // int xlen = -1;
-    int ylen = -1;
-    board1 = pack_8(env, array, &xlen, &ylen);
-    if (!board1) {
-      if (ylen % 8) {
-        printf("Array must have a y size divisable by 8\n");
-        return;
-      } else {
-        printf("Indeterminate error, terminating\n");
-        return;
-      }
-    }
-    board2 = pack_8(env, array, &xlen, &ylen);
-    if (!board2) {
-      printf("Indeterminate error, terminating\n");
-      return;
-    }
-     jboolean isCopy = JNI_FALSE;
-      //entering critical
-      lookuptable = (*env)->GetPrimitiveArrayCritical(env, lookup, &isCopy);
-      if (isCopy) {
-          printf("Indeterminate error, terminating\n");
-          return;
-      }
+  (JNIEnv* env, jobject object, jint threadcount, jbyteArray lookup, jint runlength, jobjectArray array) {
+  
+  if (!initialize_all_resources(env, threadcount, lookup, runlength, array)) {
+    unsigned char** finalboard = runlength % 2 ? board2 : board1;  
+    unpack_8(env, array, finalboard, xlen, ylenpacked);
+  }
+  free_all_resources();
+}
 
-    ylenpacked = ylen/8;
-    int ylenpackedhalf = ylen/2;
-    dirty_bit1 = malloc(sizeof(char*)*(xlen));
-    dirty_bit2 = malloc(sizeof(char*)*(xlen));
-    dirty_bit1 = dirty_bit1;
-    dirty_bit2 = dirty_bit2;
-    for (int i = 0; i < xlen; i++) {
-      dirty_bit2[i] = calloc(ylenpacked, sizeof(char));
-      if (!dirty_bit2[i]) {
-        printf("Errno: %d\n", errno);
-      }
-      dirty_bit2[i] = dirty_bit2[i];
-      dirty_bit1[i] = malloc(sizeof(char)*(ylenpacked));
-      if (!dirty_bit1[i]) {
-        printf("Errno: %d\n", errno);
-      }
-      dirty_bit1[i] = dirty_bit1[i];
-      memset(dirty_bit1[i], 1, sizeof(char)*ylenpacked);
-    }
-    barrier = malloc(sizeof(pthread_barrier_t));
-    threadcount = xlen < threadcount ? xlen : threadcount;
-    P = threadcount;
-    int errorval = 0;
-    if ((errorval = pthread_barrier_init(barrier, NULL, threadcount))) {
-        printf("Barrier initialization failed with error %d, terminating\n", errorval);
-        return;
-    }
+// Barrier code is taken from: https://stackoverflow.com/questions/33598686/spinning-thread-barrier-using-atomic-builtins
 
-    pthread_t* threadpool = malloc(sizeof(pthread_t) * threadcount-1);
-    struct thread_work* workpool = malloc(sizeof(struct thread_work)*threadcount-1);
-    int startwork = 0;
-    // printf("Creating %d threads\n", threadcount);
-    for (int i = 0; i < threadcount-1; i++) {
-        int amountofwork = (xlen/threadcount) + ((xlen%threadcount) > i);
-        workpool[i] = (struct thread_work) {runlength, startwork, startwork+amountofwork};
-        pthread_create(threadpool+i, 0, thread_do_work, workpool+i);
-        startwork+=amountofwork;
-    }
-    int amountofwork = (xlen/threadcount);
-    struct thread_work finalwork = (struct thread_work) {runlength, startwork, startwork+amountofwork};
-    thread_do_work(&finalwork);
-    // printf("%d, %d\n", ylenpackedhalf, ylenpackeddouble);
-    // printf("packed: %d packed half: %d packed double: %d\n", ylenpacked, ylenpackedhalf, ylenpackeddouble);
-    unpack_8(env, array, board1, xlen, ylenpacked);
-    // printf("Skipped: %lu, didn't skip %lu\n", skip_count, non_skip_count);
-    }
+// Because we're saturating the cores and denying multitasking, there's no reason to sleep on waits
+// So we're busy waiting instead to squeeze out a bit more performance
+
 int bar = 0; // Counter of threads, faced barrier.
 volatile int passed = 0; // Number of barriers, passed by all threads.
 
-void barrier_wait()
+// Due to __sync instructions, code is GCC/Clang dependant
+static void barrier_wait()
 {
     int passed_old = passed; // Should be evaluated before incrementing *bar*!
 
-    if(__sync_fetch_and_add(&bar,1) == (P - 1))
+    if(__sync_fetch_and_add(&bar,1) == (global_thread_count - 1))
     {
         // The last thread, faced barrier.
         bar = 0;
